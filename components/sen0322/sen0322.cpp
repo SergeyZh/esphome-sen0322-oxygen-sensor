@@ -40,8 +40,7 @@ void SEN0322Sensor::dump_config() {
 void SEN0322Sensor::update() {
   ESP_LOGV(TAG, "Updating SEN0322 sensor...");
   
-  // According to SEN0322 datasheet, we need to read oxygen data directly
-  // Write command to read oxygen concentration
+  // Send command to read oxygen concentration
   if (!this->write_byte(SEN0322_OXYGEN_DATA, 0x00)) {
     ESP_LOGE(TAG, "Failed to send oxygen data command");
     this->status_set_warning();
@@ -59,33 +58,12 @@ void SEN0322Sensor::update() {
     return;
   }
   
-  // Debug: Log raw data
-  ESP_LOGD(TAG, "Raw data: 0x%02X 0x%02X 0x%02X", data[0], data[1], data[2]);
+  // Parse oxygen concentration with little-endian byte order
+  // SEN0322 uses reversed byte order: data[1] = high byte, data[0] = low byte
+  uint16_t raw_oxygen = (data[1] << 8) | data[0];
+  float oxygen_concentration = raw_oxygen * 0.01f;
   
-  // Parse oxygen concentration according to datasheet
-  // Method 1: Standard parsing (data[0] = high byte, data[1] = low byte)
-  uint16_t raw_oxygen = (data[0] << 8) | data[1];
-  float oxygen_concentration = raw_oxygen * 0.01f;  // Changed from 0.1f to 0.01f
-  
-  // Debug: Log calculated value
-  ESP_LOGD(TAG, "Calculated oxygen (method 1): %.2f%%", oxygen_concentration);
-  
-  // If still invalid, try alternative parsing method
-  if (oxygen_concentration < 0.0f || oxygen_concentration > 25.0f) {
-    // Method 2: Alternative parsing (reverse byte order)
-    raw_oxygen = (data[1] << 8) | data[0];
-    oxygen_concentration = raw_oxygen * 0.01f;
-    ESP_LOGD(TAG, "Calculated oxygen (method 2): %.2f%%", oxygen_concentration);
-  }
-  
-  // If still invalid, try method 3
-  if (oxygen_concentration < 0.0f || oxygen_concentration > 25.0f) {
-    // Method 3: Use only first byte
-    oxygen_concentration = data[0] * 0.1f;
-    ESP_LOGD(TAG, "Calculated oxygen (method 3): %.2f%%", oxygen_concentration);
-  }
-  
-  // Validate reading (oxygen should be between 15-25% in normal air)
+  // Validate reading (oxygen should be between 0-30% for safety margin)
   if (oxygen_concentration < 0.0f || oxygen_concentration > 30.0f) {
     ESP_LOGW(TAG, "Invalid oxygen reading: %.2f%% (raw: 0x%04X)", oxygen_concentration, raw_oxygen);
     this->status_set_warning();
