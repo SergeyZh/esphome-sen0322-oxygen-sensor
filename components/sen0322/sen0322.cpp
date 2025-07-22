@@ -22,8 +22,7 @@ void SEN0322Sensor::setup() {
     this->mark_failed();
     return;
   }
-  
-  delay(100);
+  readFlash();
   ESP_LOGCONFIG(TAG, "SEN0322 setup complete");
 }
 
@@ -32,8 +31,8 @@ void SEN0322Sensor::readFlash() {
   value = this->read_byte(SEN0322_GET_KEY_REGISTER).value_or(0);
   ESP_LOGD(TAG, "Got flash value: 0x%02X", value);
   
-  if (value == 0) { key = 20.9 / 120.0; }
-  else { key = (float)value / 1000.0; }
+  if (value == 0) { calibrated_value_ = 20.9 / 120.0; }
+  else { calibrated_value_ = (float)value / 1000.0; }
 }
 
 void SEN0322Sensor::dump_config() {
@@ -73,7 +72,7 @@ void SEN0322Sensor::update() {
   // Parse oxygen concentration with little-endian byte order
   // SEN0322 uses reversed byte order: data[1] = high byte, data[0] = low byte
   // uint16_t raw_oxygen = (data[1] << 8) | data[0];
-  float oxygen_concentration = (key * (((float)data[0]) + ((float)data[1] / 10.0) + ((float)data[2] / 100.0)));
+  float oxygen_concentration = (calibrated_value_ * (((float)data[0]) + ((float)data[1] / 10.0) + ((float)data[2] / 100.0)));
   
   // Validate reading (oxygen should be between 0-30% for safety margin)
   if (oxygen_concentration < 0.0f || oxygen_concentration > 30.0f) {
